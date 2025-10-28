@@ -1,0 +1,73 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: todolist-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: todolist_db
+      MYSQL_USER: todouser
+      MYSQL_PASSWORD: todopassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database-setup.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - todolist-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-prootpassword",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: todolist-backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=mysql;Port=3306;Database=todolist_db;User=root;Password=rootpassword;
+    ports:
+      - "5001:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - todolist-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/Frontend
+      dockerfile: Dockerfile
+    container_name: todolist-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - todolist-network
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:5000
+
+volumes:
+  mysql_data:
+
+networks:
+  todolist-network:
+    driver: bridge
